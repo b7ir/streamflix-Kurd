@@ -33,8 +33,8 @@ class NetflixIPTVPlayer {
         this.defaultPlaylistType = this.resolveDefaultPlaylistType();
         this.activePlaylistType = this.defaultPlaylistType;
         this.playlists = {
-            india: 'https://iptv-org.github.io/iptv/countries/in.m3u',
-            global: 'https://iptv-org.github.io/iptv/index.m3u'
+            kurdish: 'https://kurdtvs.net/iptv.php?format=m3u',
+            kurd2: 'https://iptv-org.github.io/iptv/languages/kur.m3u'
         };
         
         this.initializeElements();
@@ -528,7 +528,7 @@ class NetflixIPTVPlayer {
 
     async loadPlaylist(type) {
         try {
-            const selectedType = this.playlists[type] ? type : 'global';
+            const selectedType = this.playlists[type] ? type : 'kurdish';
             this.activePlaylistType = selectedType;
             localStorage.setItem('streamflix-preferred-playlist', selectedType);
             if (this.playlistSelect) {
@@ -580,14 +580,14 @@ class NetflixIPTVPlayer {
     resolveDefaultPlaylistType() {
         const urlParams = new URLSearchParams(window.location.search);
         const fromUrl = urlParams.get('playlist');
-        if (fromUrl && ['global', 'india'].includes(fromUrl)) {
+        if (fromUrl && ['kurdish', 'kurd2'].includes(fromUrl)) {
             return fromUrl;
         }
         const stored = localStorage.getItem('streamflix-preferred-playlist');
-        if (stored && ['global', 'india'].includes(stored)) {
+        if (stored && ['kurdish', 'kurd2'].includes(stored)) {
             return stored;
         }
-        return 'global';
+        return 'kurdish';
     }
 
     parsePlaylist(playlistText) {
@@ -939,13 +939,10 @@ class NetflixIPTVPlayer {
             return;
         }
 
-        // Handle mixed content by prioritizing relay over direct upgrades
         if (this.isMixedContentUrl(streamUrl)) {
             if (this.relayEnabled) {
-                // Use relay when available (preferred solution)
                 usingRelay = true;
             } else if (allowHttpUpgrade) {
-                // Only fall back to HTTP->HTTPS upgrade if relay is unavailable
                 const upgradedUrl = this.upgradeToHttps(streamUrl);
                 console.warn('HTTP stream on HTTPS page. Trying HTTPS fallback:', upgradedUrl);
                 streamUrl = upgradedUrl;
@@ -967,16 +964,13 @@ class NetflixIPTVPlayer {
         const loadToken = ++this.channelLoadToken;
         let networkRetries = 0;
 
-        // Stop current playback before replacing source.
         video.pause();
         
-        // Destroy previous HLS instance if exists
         if (this.currentHls) {
             this.currentHls.destroy();
             this.currentHls = null;
         }
         
-        // Check if HLS.js is supported and URL is m3u8
         if (Hls.isSupported()) {
             console.log('Using HLS.js');
             const hls = new Hls({
@@ -989,7 +983,6 @@ class NetflixIPTVPlayer {
             hls.attachMedia(video);
             
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                // Ignore stale events from superseded load requests.
                 if (loadToken !== this.channelLoadToken || hls !== this.currentHls) return;
                 console.log('HLS Manifest parsed, playing...');
                 const playPromise = video.play();
@@ -1030,7 +1023,6 @@ class NetflixIPTVPlayer {
                                 return;
                             }
                             
-                            // Auto-retry with relay if direct connection fails (fixes CORS on HTTPS streams)
                             if (!usingRelay && this.relayEnabled && !forceDirect) {
                                 console.warn('Direct connection failed, attempting fallback to relay...');
                                 this.loadChannel(url, channel, {
@@ -1042,7 +1034,6 @@ class NetflixIPTVPlayer {
                                 return;
                             }
 
-                            // If relay fails and we haven't tried upgrading to HTTPS yet, try that as a last resort
                             if (usingRelay && !allowDirectFallback && allowHttpUpgrade && this.isHttpStreamUrl(streamUrl)) {
                                 const upgradedUrl = this.upgradeToHttps(streamUrl);
                                 console.warn('Relay failed, attempting direct HTTPS upgrade fallback:', upgradedUrl);
@@ -1055,8 +1046,6 @@ class NetflixIPTVPlayer {
                                 return;
                             }
 
-                            // If relay fails with 403/401, it might be blocking the relay IP.
-                            // Try direct connection even if it's HTTP (browser might block mixed content, but it's worth a shot if user has disabled protection)
                             if (usingRelay && !allowDirectFallback && !forceDirect && (data.response.code === 403 || data.response.code === 401)) {
                                 console.warn('Relay blocked (403/401), attempting direct connection as last resort...');
                                 this.loadChannel(streamUrl, channel, {
@@ -1097,7 +1086,6 @@ class NetflixIPTVPlayer {
             this.currentHls = hls;
             
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            // Safari native HLS support
             console.log('Using native HLS support');
             video.src = playbackUrl;
             video.addEventListener('loadedmetadata', () => {
@@ -1141,11 +1129,9 @@ class NetflixIPTVPlayer {
 
         console.log('Loading YouTube video:', videoId);
         
-        // Hide standard video player
         this.videoPlayer.pause();
         this.videoPlayer.style.display = 'none';
         
-        // Show YouTube container
         if (this.youtubeContainer) {
             this.youtubeContainer.style.display = 'block';
             this.youtubeContainer.innerHTML = `
@@ -1165,7 +1151,6 @@ class NetflixIPTVPlayer {
         this.showLoading(false);
         this.isPlaying = true;
         
-        // Update UI state
         const playIcon = this.playPauseBtn.querySelector('i');
         playIcon.className = 'fas fa-pause';
         this.setControlsOverlayVisible(true, true);
@@ -1344,22 +1329,10 @@ class NetflixIPTVPlayer {
     }
 
     shouldRelayUrl(url, forceDirect = false, forceRelay = false) {
-        if (forceDirect) {
-            return false;
-        }
-        if (!this.relayEnabled) {
-            return false;
-        }
-        if (forceRelay) {
-            return true;
-        }
-        
-        // In Electron with web security disabled, we can play HTTP streams directly.
-        // Direct connection is preferred over relay to avoid overhead and potential proxy blocking.
-        if (this.isElectron() && this.isHttpStreamUrl(url)) {
-            return false;
-        }
-
+        if (forceDirect) return false;
+        if (!this.relayEnabled) return false;
+        if (forceRelay) return true;
+        if (this.isElectron() && this.isHttpStreamUrl(url)) return false;
         return this.isHttpStreamUrl(url);
     }
 
@@ -1396,7 +1369,6 @@ class NetflixIPTVPlayer {
             };
         }
 
-        // Cross-origin manifest load failures with status 0 are commonly CORS blocks.
         if (details.includes('manifestloaderror') && isCrossOrigin && (responseCode === 0 || responseCode === null)) {
             return {
                 blockRetry: true,
@@ -1524,34 +1496,25 @@ class NetflixIPTVPlayer {
     }
 
     handleKeyboard(event) {
-        // Allow escape to close sidebar without triggering player shortcuts.
         if (event.key === 'Escape' && this.isSidebarOpen()) {
             this.toggleSidebar(false);
             return;
         }
 
-        // Handle escape key to exit fullscreen
         if (event.key === 'Escape' && document.fullscreenElement) {
             document.exitFullscreen();
             return;
         }
 
-        // Disable all media shortcuts while sidebar is open.
-        if (this.isSidebarOpen()) {
-            return;
-        }
+        if (this.isSidebarOpen()) return;
 
-        // Don't hijack keys while typing in form controls.
         const activeEl = document.activeElement;
         const isTyping = !!activeEl && (
             ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName) ||
             activeEl.isContentEditable
         );
-        if (isTyping) {
-            return;
-        }
+        if (isTyping) return;
         
-        // Prevent default for media keys
         if ([' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'm'].includes(event.key)) {
             event.preventDefault();
         }
@@ -1603,12 +1566,10 @@ class NetflixIPTVPlayer {
         const fullscreenIcon = this.fullscreenBtn.querySelector('i');
         
         if (isFullscreen) {
-            // Enter fullscreen - hide all UI elements except video
             document.body.classList.add('fullscreen-active');
             fullscreenIcon.className = 'fas fa-compress';
             console.log('Entered fullscreen mode');
         } else {
-            // Exit fullscreen - restore UI elements
             document.body.classList.remove('fullscreen-active');
             fullscreenIcon.className = 'fas fa-expand';
             console.log('Exited fullscreen mode');
@@ -1654,7 +1615,6 @@ class NetflixIPTVPlayer {
     }
 
     handleScroll() {
-        // Parallax effect for hero section
         const scrolled = window.pageYOffset;
         const hero = document.querySelector('.hero-section');
         if (hero) {
@@ -1683,14 +1643,12 @@ class NetflixIPTVPlayer {
             this.updateProgramPanel(customChannel);
             this.loadChannel(cleanUrl, customChannel);
             
-            // Close sidebar on mobile
             if (window.innerWidth <= 768) {
                 this.toggleSidebar(false);
             }
         }
     }
 
-    // Event handlers
     onPlay() {
         this.isPlaying = true;
         if (this.videoWrapper) {
@@ -1718,7 +1676,6 @@ class NetflixIPTVPlayer {
         this.showLoading(false);
         this.showError('Failed to load channel. This stream may be offline or geo-restricted.');
         
-        // Try next channel automatically
         setTimeout(() => {
             if (this.channels.length > 1) {
                 console.log('Attempting next channel...');
@@ -1745,7 +1702,6 @@ class NetflixIPTVPlayer {
     }
 
     showError(message) {
-        // Create error notification
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error-notification';
         errorDiv.innerHTML = `
@@ -1768,7 +1724,6 @@ class NetflixIPTVPlayer {
         
         document.body.appendChild(errorDiv);
         
-        // Auto-remove after 5 seconds
         setTimeout(() => {
             if (errorDiv.parentNode) {
                 errorDiv.parentNode.removeChild(errorDiv);
@@ -1776,7 +1731,6 @@ class NetflixIPTVPlayer {
         }, 5000);
     }
 
-    // Detect if user is on mobile device
     isMobileDevice() {
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                (window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
@@ -1786,12 +1740,10 @@ class NetflixIPTVPlayer {
         return !!window.streamflixDesktop || /Electron/i.test(navigator.userAgent);
     }
 
-    // Initialize mobile-specific features
     initializeMobileFeatures() {
         if (this.isMobileDevice()) {
             console.log('Mobile device detected - optimizing controls');
             
-            // Prevent double-tap zoom on controls
             const controls = document.querySelector('.player-controls-overlay');
             if (controls) {
                 controls.addEventListener('touchend', (e) => {
@@ -1807,11 +1759,9 @@ class NetflixIPTVPlayer {
     }
 }
 
-// Function to safely initialize player
 function initializeStreamFlixPlayer() {
     console.log('🔍 Checking if player should be initialized...');
     
-    // Multiple checks to ensure we're on the right page
     const videoPlayer = document.getElementById('video-player');
     const playerPage = document.querySelector('.video-player-page');
     const playerContainer = document.querySelector('.player-container');
@@ -1820,7 +1770,6 @@ function initializeStreamFlixPlayer() {
     console.log('Player page class:', playerPage);
     console.log('Player container:', playerContainer);
     
-    // Only initialize if we're definitely on the player page
     if (videoPlayer && (playerPage || playerContainer)) {
         console.log('🎬 StreamFlix Player Initializing...');
         try {
@@ -1837,7 +1786,6 @@ function initializeStreamFlixPlayer() {
     }
 }
 
-// Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     console.log('📄 DOM Content Loaded');
     initializeStreamFlixPlayer();
